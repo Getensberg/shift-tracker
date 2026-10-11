@@ -67,6 +67,13 @@ export default async function GroupEdit({ params, searchParams }: { params: Prom
                 <option value="ACCEPT_ALL">Отмечать всех</option>
               </select>
             </label>
+            <label className="field">
+              Подпись называет другого сотрудника, не отправителя
+              <select name="senderMismatch" defaultValue={g.senderMismatch}>
+                <option value="ACCEPT">Принимать (фото коллеги), отметить в комментарии</option>
+                <option value="REVIEW">На ручную проверку</option>
+              </select>
+            </label>
           </div>
         </div>
 

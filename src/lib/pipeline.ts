@@ -236,34 +236,56 @@ export async function decide(input: Message): Promise<Decision> {
     );
   }
 
+  // Сотрудник, к которому привязан аккаунт отправителя (если привязан).
+  const sender = msg.fromUserId
+    ? await prisma.employee.findFirst({ where: { tgUserId: msg.fromUserId, active: true } })
+    : null;
+  const senderLabel = sender
+    ? `${fullName(sender)}${msg.fromUsername ? ` (@${msg.fromUsername})` : ""}`
+    : null;
+  let note = "";
+
   if (m.matched.length) {
+    // Подпись важнее аккаунта: фото заступающего коллеги часто отправляет другой человек.
     employees = m.matched.map((c) => ({ id: c.id, name: fullName(c) }));
     how = m.fuzzy ? "по подписи (с учётом опечатки/окончания)" : "по подписи";
-  } else {
-    const byAccount = msg.fromUserId
-      ? await prisma.employee.findFirst({ where: { tgUserId: msg.fromUserId, active: true } })
-      : null;
-    if (byAccount) {
-      if (groupStaff.length && !groupStaff.some((e) => e.id === byAccount.id)) {
-        return review(`Аккаунт Telegram привязан к сотруднику ${fullName(byAccount)}, но он не закреплён за этой группой`, [byAccount.id]);
+    if (sender && !m.matched.some((c) => c.id === sender.id)) {
+      if (group.senderMismatch === "REVIEW") {
+        return review(
+          `Подпись «${employees.map((e) => e.name).join(", ")}», а отправил другой сотрудник — ${senderLabel}`,
+          employees.map((e) => e.id),
+        );
       }
-      employees = [{ id: byAccount.id, name: fullName(byAccount) }];
-      how = msg.caption ? "по аккаунту Telegram (подпись не распознана)" : "по аккаунту Telegram (без подписи)";
-    } else if (msg.caption) {
-      if (groupStaff.length) {
-        const everyone = await prisma.employee.findMany({ where: { active: true } });
-        const wide = matchCaption(msg.caption, everyone.map(toCandidate));
-        if (wide.matched.length) {
-          return review(
-            `Сотрудник ${wide.matched.map(fullName).join(", ")} найден в справочнике, но не закреплён за этой группой`,
-            wide.matched.map((c) => c.id),
-          );
-        }
-      }
-      return review(`По подписи «${msg.caption}» сотрудник не определён`);
-    } else {
-      return review("Фото без подписи, аккаунт Telegram не привязан к сотруднику");
+      note = `; отправил другой сотрудник — ${senderLabel}`;
     }
+  } else if (msg.caption) {
+    // Подпись есть, но по справочнику группы не распознана — автоматически 1 не ставим (п. 6 ТЗ).
+    if (groupStaff.length) {
+      const everyone = await prisma.employee.findMany({ where: { active: true } });
+      const wide = matchCaption(msg.caption, everyone.map(toCandidate));
+      if (wide.matched.length) {
+        return review(
+          `Сотрудник ${wide.matched.map(fullName).join(", ")} найден в справочнике, но не закреплён за этой группой`,
+          wide.matched.map((c) => c.id),
+        );
+      }
+    }
+    if (sender) {
+      return review(
+        `Подпись «${msg.caption}» не распознана; отправитель привязан к ${senderLabel}. Проверьте, кто на фото`,
+        [sender.id],
+      );
+    }
+    return review(`По подписи «${msg.caption}» сотрудник не определён`);
+  } else if (sender) {
+    // Подписи нет — определяем по привязанному аккаунту.
+    if (groupStaff.length && !groupStaff.some((e) => e.id === sender.id)) {
+      return review(`Аккаунт Telegram привязан к сотруднику ${fullName(sender)}, но он не закреплён за этой группой`, [sender.id]);
+    }
+    employees = [{ id: sender.id, name: fullName(sender) }];
+    how = "по аккаунту Telegram (без подписи)";
+  } else {
+    return review("Фото без подписи, аккаунт Telegram не привязан к сотруднику");
   }
 
   const ids = employees.map((e) => e.id);
@@ -287,7 +309,7 @@ export async function decide(input: Message): Promise<Decision> {
     employees,
     shiftDate: shift.shiftDate,
     deltaMin: shift.deltaMin,
-    reason: `Распознано ${how}; фото ${describeDelta(shift.deltaMin)}`,
+    reason: `Распознано ${how}; фото ${describeDelta(shift.deltaMin)}${note}`,
   };
 }
 

@@ -18,7 +18,7 @@ export function ScenarioRunner({ today }: { today: string }) {
             Дата смены <input type="date" name="date" defaultValue={today} required />
           </label>
           <label className="check"><input type="checkbox" name="cleanup" defaultChecked /> очистить прошлую симуляцию</label>
-          <Submit pendingText="Прогоняю…">Прогнать 16 сценариев</Submit>
+          <Submit pendingText="Прогоняю…">Прогнать 18 сценариев</Submit>
         </form>
       </div>
       <p className="muted small" style={{ margin: 0 }}>

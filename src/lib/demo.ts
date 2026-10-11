@@ -208,6 +208,22 @@ export async function runScenarios(date: string, resetFirst = true): Promise<Sce
   await step("Фото без подписи, аккаунт привязан", "Аккаунт Telegram привязан к Голицину", "ACCEPTED", {
     ...DAY, fromId: 700002, fromName: "Голицин", sentAt: at(date, "07:45"), withPhoto: true,
   });
+  // 6a
+  await step("Подпись не распознана, аккаунт привязан", "Голицин отправил фото с подписью «Порошков» (нет в справочнике)", "REVIEW", {
+    ...DAY, fromId: 700002, fromName: "Голицин", caption: "Порошков", sentAt: at(date, "07:47"), withPhoto: true,
+  });
+  // 6b
+  await step(
+    "Фото коллеги: подпись ≠ отправитель",
+    "Мехоношин отправил фото с подписью «Македонский» → 1 у Македонского, отправитель в комментарии",
+    "ACCEPTED",
+    { ...DAY, fromId: 700001, fromName: "Алексей", fromUsername: "mekhonoshin", caption: "Македонский", sentAt: at(date, "08:10"), withPhoto: true },
+    async (id) => {
+      const m = await prisma.message.findUnique({ where: { id }, include: { marks: { include: { employee: true } } } });
+      if (m?.marks[0]?.employee.lastName !== "Македонский") return "отметка не у Македонского";
+      return m.reason?.includes("отправил другой сотрудник") ? null : "в комментарии нет отправителя";
+    },
+  );
   // 7
   await step("Фото без подписи, аккаунт не привязан", "Нельзя понять, кто на фото", "REVIEW", {
     ...DAY, fromId: 700099, fromName: "Неизвестный", sentAt: at(date, "07:58"), withPhoto: true,

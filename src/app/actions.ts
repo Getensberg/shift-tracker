@@ -147,6 +147,7 @@ export async function saveGroupAction(form: FormData) {
           windowAfterMin: after,
           outOfWindow: str(form, "outOfWindow") === "REJECT" ? "REJECT" : "REVIEW",
           multiEmployee: str(form, "multiEmployee") === "ACCEPT_ALL" ? "ACCEPT_ALL" : "REVIEW",
+          senderMismatch: str(form, "senderMismatch") === "REVIEW" ? "REVIEW" : "ACCEPT",
           autoAccept: form.get("autoAccept") === "on",
           active: form.get("active") === "on",
         },

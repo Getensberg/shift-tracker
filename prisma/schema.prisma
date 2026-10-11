@@ -25,6 +25,7 @@ model Group {
   windowAfterMin   Int              @default(90) // и не позже чем через N минут после
   outOfWindow      OutOfWindowRule  @default(REVIEW)
   multiEmployee    MultiEmployeeRule @default(REVIEW)
+  senderMismatch   SenderMismatchRule @default(ACCEPT) // подпись называет другого, не отправителя
   autoAccept       Boolean          @default(true) // false = всё через ручную проверку
   active           Boolean          @default(true)
   createdAt        DateTime         @default(now())
@@ -37,6 +38,11 @@ model Group {
 enum OutOfWindowRule {
   REVIEW // фото вне окна -> на ручную проверку
   REJECT // фото вне окна -> отклонить
+}
+
+enum SenderMismatchRule {
+  ACCEPT // фото коллеги — принимать (отправитель пишется в комментарий)
+  REVIEW // на ручную проверку (каждый обязан фотографироваться сам)
 }
 
 enum MultiEmployeeRule {
