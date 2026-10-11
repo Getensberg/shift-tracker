@@ -1,0 +1,169 @@
+// Модель данных системы учёта смен.
+// Источник правды — эта БД. Google Sheets — зеркало табеля.
+
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "client"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL") // pooled-строка Neon (для приложения)
+  directUrl = env("DIRECT_URL") // прямая строка Neon (для миграций)
+}
+
+/// Telegram-группа = объект охраны / пост со своим графиком.
+model Group {
+  id               Int              @id @default(autoincrement())
+  chatId           BigInt           @unique
+  title            String
+  username         String? // публичный @username группы, если есть (для ссылок)
+  objectName       String? // объект охраны / пост
+  timezone         String           @default("Europe/Moscow")
+  shiftStart       String           @default("08:00") // ЧЧ:ММ начала смены
+  windowBeforeMin  Int              @default(60) // фото не раньше чем за N минут до начала
+  windowAfterMin   Int              @default(90) // и не позже чем через N минут после
+  outOfWindow      OutOfWindowRule  @default(REVIEW)
+  multiEmployee    MultiEmployeeRule @default(REVIEW)
+  autoAccept       Boolean          @default(true) // false = всё через ручную проверку
+  active           Boolean          @default(true)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  employees GroupEmployee[]
+  messages  Message[]
+}
+
+enum OutOfWindowRule {
+  REVIEW // фото вне окна -> на ручную проверку
+  REJECT // фото вне окна -> отклонить
+}
+
+enum MultiEmployeeRule {
+  REVIEW // несколько сотрудников в подписи -> на ручную проверку
+  ACCEPT_ALL // отметить всех найденных
+}
+
+model Employee {
+  id              Int      @id @default(autoincrement())
+  lastName        String
+  firstName       String?
+  middleName      String?
+  aliases         String[] // позывные, альтернативные написания
+  personnelNumber String?  @unique // табельный номер
+  tgUserId        BigInt?  @unique // привязка аккаунта Telegram
+  tgUsername      String?
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  groups GroupEmployee[]
+  marks  ShiftMark[]
+  audit  AuditLog[]
+}
+
+/// Ограничение: какие сотрудники могут работать в группе (если пусто — все активные).
+model GroupEmployee {
+  groupId    Int
+  employeeId Int
+  group      Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, employeeId])
+}
+
+enum MessageStatus {
+  PENDING // сохранено, ещё не обработано
+  ACCEPTED // отметка поставлена
+  REJECTED // отклонено правилом / оператором
+  REVIEW // ручная проверка
+  DUPLICATE // сотрудник уже отмечен за эту дату
+  ERROR // ошибка обработки (будет повтор)
+  IGNORED // нерелевантно (группа не подключена, фото из альбома и т.п.)
+}
+
+/// Журнал всех обработанных сообщений с фото.
+model Message {
+  id            Int           @id @default(autoincrement())
+  chatId        BigInt
+  tgMessageId   Int
+  groupId       Int?
+  group         Group?        @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  fromUserId    BigInt?
+  fromName      String?
+  fromUsername  String?
+  caption       String?
+  photoFileId   String?
+  mediaGroupId  String?
+  sentAt        DateTime // фактическое время публикации
+  editedAt      DateTime?
+  link          String? // ссылка на первоисточник
+  status        MessageStatus @default(PENDING)
+  reason        String? // причина решения / ошибки (человекочитаемо)
+  suggestedIds  Int[] // кандидаты-сотрудники для оператора
+  suggestedDate DateTime?     @db.Date // предполагаемая дата смены
+  attempts      Int           @default(0)
+  processedAt   DateTime?
+  simulated     Boolean       @default(false)
+  raw           Json
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  marks ShiftMark[]
+  audit AuditLog[]
+
+  @@unique([chatId, tgMessageId]) // идемпотентность: одно сообщение = одна запись
+  @@index([status, createdAt])
+  @@index([sentAt])
+}
+
+enum MarkSource {
+  AUTO
+  MANUAL
+}
+
+enum SyncStatus {
+  PENDING
+  OK
+  ERROR
+  DISABLED
+}
+
+/// Ячейка табеля: "1" у сотрудника за дату.
+model ShiftMark {
+  id          Int        @id @default(autoincrement())
+  employeeId  Int
+  employee    Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  shiftDate   DateTime   @db.Date
+  value       Int        @default(1)
+  objectName  String?
+  source      MarkSource
+  messageId   Int?
+  message     Message?   @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  lateMinutes Int? // >0 — фото позже начала смены
+  comment     String?
+  createdBy   String     @default("system")
+  createdAt   DateTime   @default(now())
+  sheetStatus SyncStatus @default(PENDING)
+  sheetError  String?
+
+  @@unique([employeeId, shiftDate]) // никаких дублей в табеле
+  @@index([shiftDate])
+}
+
+/// История всех изменений (автоматических и ручных).
+model AuditLog {
+  id         Int       @id @default(autoincrement())
+  at         DateTime  @default(now())
+  actor      String // system | admin | simulator
+  action     String // MARK_CREATED, MARK_REMOVED, DUPLICATE, REVIEW_APPROVED, ...
+  employeeId Int?
+  employee   Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  shiftDate  DateTime? @db.Date
+  messageId  Int?
+  message    Message?  @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  details    String?
+
+  @@index([employeeId, shiftDate])
+  @@index([at])
+}

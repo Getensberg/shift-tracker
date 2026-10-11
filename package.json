@@ -1,0 +1,43 @@
+{
+  "name": "shift-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Автоматическое заполнение табеля смен по фото из Telegram-групп",
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && prisma migrate deploy && next build",
+    "build:local": "prisma generate && next build",
+    "start": "next start",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts",
+    "postinstall": "prisma generate"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "6.19.3",
+    "@prisma/client": "6.19.3",
+    "exceljs": "4.4.0",
+    "next": "15.5.27",
+    "pg": "^8.23.1",
+    "react": "19.1.9",
+    "react-dom": "19.1.9"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "prisma": "6.19.3",
+    "tsx": "^4.19.0",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
